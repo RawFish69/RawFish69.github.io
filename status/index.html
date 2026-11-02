@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Nori status</title>
+<!-- Self-contained: the Worker also serves this page at any nori.fish path while the Pi is down. -->
+<style>
+  :root {
+    --bg: #121212; --surface: #1b1b1b; --line: #2e2e2e; --ink: #ececec; --muted: #a3a3a3;
+    --accent: #4aa8e0; --up: #3fb950; --down: #f0605a; --unknown: #8f8f8f;
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f6f6f6; --surface: #ffffff; --line: #dedede; --ink: #171717; --muted: #5c5c5c;
+            --accent: #0077b6; --up: #1a7f37; --down: #c62828; --unknown: #8f8f8f; color-scheme: light; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 32px 16px;
+         background: var(--bg); color: var(--ink);
+         font: 16px/1.6 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif; }
+  main { width: 100%; max-width: 34rem; }
+  h1 { font-size: 1.6rem; line-height: 1.25; margin: 0 0 .5rem; }
+  p { margin: 0 0 1rem; color: var(--muted); }
+  a { color: var(--accent); }
+  .status { margin: 1.5rem 0; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; }
+  .row + .row { border-top: 1px solid var(--line); }
+  .name { font-weight: 600; }
+  .name small { display: block; font-weight: 400; color: var(--muted); font-size: .8rem; }
+  .state { display: inline-flex; align-items: center; gap: 8px; font-size: .9rem; white-space: nowrap; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--unknown); }
+  [data-state="up"] .dot { background: var(--up); }
+  [data-state="down"] .dot { background: var(--down); }
+  .meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px;
+          border-top: 1px solid var(--line); font-size: .8rem; color: var(--muted); }
+  button { font: inherit; font-size: .8rem; color: var(--ink); background: transparent; border: 1px solid var(--line);
+           border-radius: 5px; padding: 4px 10px; cursor: pointer; }
+  button:hover, .cta:hover { border-color: var(--accent); }
+  .cta { display: inline-block; margin-top: .25rem; padding: .6rem 1rem; border: 1px solid var(--line);
+         border-radius: 7px; color: var(--ink); text-decoration: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="headline">Nori is temporarily down</h1>
+  <p id="summary">The server behind nori.fish is offline right now. Please check back later.</p>
+
+  <section class="status" aria-label="Service status" aria-live="polite">
+    <div class="row" id="web" data-state="unknown">
+      <span class="name">Website <small>nori.fish</small></span>
+      <span class="state"><span class="dot"></span><span class="label">Checking…</span></span>
+    </div>
+    <div class="row" id="api" data-state="unknown">
+      <span class="name">API <small>nori.fish/api</small></span>
+      <span class="state"><span class="dot"></span><span class="label">Checking…</span></span>
+    </div>
+    <div class="meta">
+      <span id="checked">Checking now…</span>
+      <button type="button" id="recheck">Check again</button>
+    </div>
+  </section>
+
+  <p>If you're from industry or academia, my robotics portfolio is still available.<br>
+     Email contact: <a href="mailto:dev@nori.fish">dev@nori.fish</a></p>
+  <a class="cta" id="portfolio" href="/robotics/">View the robotics portfolio</a>
+</main>
+<script>
+(function () {
+  var STATUS_URL = 'https://nori.fish/_fallback/status';
+  var onNori = location.hostname === 'nori.fish';
+  var portfolio = document.getElementById('portfolio');
+  // The main site's page when nori.fish is up; otherwise the backup copy (the
+  // Worker serves it at /robotics/ on nori.fish, and it is the GitHub Pages root).
+  var backupHref = onNori ? '/robotics/' : '../';
+  portfolio.href = backupHref;
+
+  function show(id, info) {
+    var row = document.getElementById(id);
+    var state = !info ? 'unknown' : info.up ? 'up' : 'down';
+    row.dataset.state = state;
+    row.querySelector('.label').textContent =
+      state === 'unknown' ? 'Unknown' : state === 'up' ? 'Operational' : 'Down';
+  }
+
+  function check() {
+    document.getElementById('checked').textContent = 'Checking now…';
+    fetch(STATUS_URL, { cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (s) {
+        show('web', s.web);
+        show('api', s.api);
+        var allUp = s.web.up && s.api.up;
+        portfolio.href = s.web.up ? 'https://nori.fish/robotics/' : backupHref;
+        document.getElementById('headline').textContent = allUp ? 'Nori is back up' : 'Nori is temporarily down';
+        document.getElementById('summary').innerHTML = allUp
+          ? 'Everything is running again. <a href="https://nori.fish/">Go to nori.fish</a>.'
+          : 'The server behind nori.fish is offline right now. Please check back later; this page rechecks every 30 seconds.';
+      })
+      .catch(function () { show('web', null); show('api', null); })
+      .then(function () {
+        document.getElementById('checked').textContent = 'Last checked ' + new Date().toLocaleTimeString();
+      });
+  }
+
+  document.getElementById('recheck').addEventListener('click', check);
+  check();
+  setInterval(check, 30000);
+})();
+</script>
+</body>
+</html>

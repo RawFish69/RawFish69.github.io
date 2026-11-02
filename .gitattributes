@@ -1,0 +1,7 @@
+* text=auto
+*.png binary
+*.jpg binary
+*.webp binary
+*.mp4 binary
+# Long translation lines make Linguist treat this as minified; count it as JavaScript.
+i18n.js linguist-generated=false
